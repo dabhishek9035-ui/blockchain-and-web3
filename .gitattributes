@@ -1,0 +1,43 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto
+
+# Explicitly mark binary files to avoid normalization
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Shell scripts should keep LF
+*.sh text eol=lf
+
+# Windows scripts should keep CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Text files prefer LF
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Source files
+*.c text
+*.cpp text
+*.h text
+*.hpp text
+*.java text
+*.py text
+*.rb text
+*.go text
+*.rs text
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+
+# Lockfiles and config
+package.json text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf

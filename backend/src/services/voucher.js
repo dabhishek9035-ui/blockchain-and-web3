@@ -15,6 +15,15 @@ export function normalizeExpiry(expiryInput) {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
   }
 
+  // Handle "N days" format (e.g., "51 days")
+  const daysMatch = value.match(/^(\d+)\s+days?$/);
+  if (daysMatch) {
+    const days = Number(daysMatch[1]);
+    const expiryDate = new Date(now);
+    expiryDate.setDate(expiryDate.getDate() + days);
+    return expiryDate;
+  }
+
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

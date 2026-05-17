@@ -12,7 +12,6 @@ export default function UploadPage() {
   const [text, setText] = useState('Congrats! You won Rs 50 cashback voucher code ABC123 expiring tomorrow.');
   const [result, setResult] = useState(null);
   const [listingPrice, setListingPrice] = useState('');
-  const [escrowAmount, setEscrowAmount] = useState('1');
   const [chainResult, setChainResult] = useState(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -20,6 +19,10 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [addresses] = useState(getContractAddresses());
   const canUseChain = Boolean(addresses.escrow && addresses.token);
+
+  // Calculate suggested price (50% of value) and escrow (10% of value)
+  const suggestedPrice = result?.value ? (result.value * 0.5).toFixed(1) : '';
+  const escrowAmount = result?.value ? (result.value * 0.1).toFixed(1) : '';
 
   function getListingIdFromReceipt(receipt, escrowContract) {
     for (const log of receipt.logs || []) {
@@ -45,7 +48,8 @@ export default function UploadPage() {
       setChainResult(null);
       const parsed = await postJson('/api/parse-voucher', { text });
       setResult(parsed);
-      setListingPrice(parsed.value ? String(parsed.value) : '');
+      // Auto-fill listing price with 50% of voucher value
+      setListingPrice(parsed.value ? (parsed.value * 0.5).toFixed(1) : '');
     } catch (err) {
       setError(err.message || 'Parsing failed');
     } finally {
@@ -70,7 +74,7 @@ export default function UploadPage() {
       }
 
       if (!Number.isFinite(sellerEscrow) || sellerEscrow <= 0) {
-        throw new Error('Enter a seller escrow amount greater than 0');
+        throw new Error('Invalid seller escrow amount');
       }
 
       setUploading(true);
@@ -101,7 +105,7 @@ export default function UploadPage() {
 
       const tokenContract = await getTokenContract();
       const escrowContract = await getEscrowContract();
-      const escrowValue = parseUnits(String(escrowAmount), 18);
+      const escrowValue = parseUnits(String(sellerEscrow), 18);
 
       setStatus('Approving seller escrow amount...');
       const approveTx = await tokenContract.approve(addresses.escrow, escrowValue);
@@ -110,7 +114,7 @@ export default function UploadPage() {
       setStatus('Uploading listing to Sepolia...');
       const listingTx = await escrowContract.createListing(
         toBytes32Hash(voucher.codeHash),
-        parseUnits(String(listingPrice), 18),
+        parseUnits(String(price), 18),
         escrowValue,
         expiryTimestamp
       );
@@ -122,8 +126,8 @@ export default function UploadPage() {
         const recorded = await postJson(`/api/vouchers/${voucher.id}/chain-listing`, {
           listingId,
           walletAddress,
-          priceXirec: Number(listingPrice),
-          escrowAmount: Number(escrowAmount)
+          priceXirec: Number(price),
+          escrowAmount: Number(sellerEscrow)
         });
         recordedVoucher = recorded.voucher || voucher;
       }
@@ -218,21 +222,34 @@ export default function UploadPage() {
                   <p className="text-sm text-slate-300">{result.expiry}</p>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30">
+                    <p className="text-xs font-medium text-cyan-400 uppercase tracking-wider mb-2">Suggested Price (50%)</p>
+                    <p className="text-2xl font-bold text-cyan-300">{suggestedPrice} XIREC</p>
+                    <p className="mt-1 text-xs text-cyan-300/70">of Rs {result.value}</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                    <p className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-2">Seller Escrow (10%)</p>
+                    <p className="text-2xl font-bold text-emerald-300">{escrowAmount} XIREC</p>
+                    <p className="mt-1 text-xs text-emerald-300/70">of Rs {result.value}</p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
-                    label="Price (XIREC)"
+                    label="Listing Price (XIREC)"
                     value={listingPrice}
                     onChange={(event) => setListingPrice(event.target.value)}
                     inputMode="decimal"
-                    placeholder="50"
+                    placeholder={suggestedPrice}
                   />
-                  <Input
-                    label="Seller Escrow (XIREC)"
-                    value={escrowAmount}
-                    onChange={(event) => setEscrowAmount(event.target.value)}
-                    inputMode="decimal"
-                    placeholder="1"
-                  />
+                  <div>
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">Seller Escrow (XIREC)</label>
+                    <div className="w-full rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-slate-300 cursor-not-allowed opacity-60">
+                      {escrowAmount} XIREC
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Fixed at 10% of voucher value (non-editable)</p>
+                  </div>
                 </div>
 
                 <Button

@@ -31,6 +31,7 @@ function serializeVoucher(voucher, listing = null, options = {}) {
     id: voucher._id,
     provider: voucher.provider,
     value: voucher.value,
+    text: voucher.text || '',
     codeHash: voucher.codeHash,
     extractedCode: options.includeCode ? voucher.extractedCode || '' : '',
     expiry: voucher.expiry,
@@ -56,6 +57,21 @@ function serializeLeaderboardUser(user, rank) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
+}
+
+function buildReputationMap(sessions = []) {
+  const reputationByWallet = new Map();
+
+  for (const session of sessions) {
+    const walletAddress = String(session._id || '').toLowerCase();
+    if (!walletAddress) {
+      continue;
+    }
+
+    reputationByWallet.set(walletAddress, Number(session.reputationScore || 0));
+  }
+
+  return reputationByWallet;
 }
 
 async function serializeTrade(listing, role) {
@@ -190,6 +206,7 @@ router.post('/vouchers', async (req, res) => {
   const voucher = await Voucher.create({
     provider,
     value: value ?? 0,
+    text,
     codeHash,
     extractedCode: code.toUpperCase(),
     expiry,
@@ -251,8 +268,34 @@ router.get('/leaderboard', async (_req, res) => {
     .sort({ xirecBalanceMirror: -1, reputationScore: -1, updatedAt: -1 })
     .limit(25);
 
+  const walletAddresses = users.map((user) => String(user.walletAddress || '').toLowerCase()).filter(Boolean);
+  const sessions = walletAddresses.length
+    ? await GameSession.aggregate([
+        {
+          $match: {
+            walletAddress: { $in: walletAddresses },
+            rewardAuthorized: true
+          }
+        },
+        {
+          $group: {
+            _id: '$walletAddress',
+            reputationScore: { $sum: '$rewardAmount' }
+          }
+        }
+      ])
+    : [];
+
+  const reputationByWallet = buildReputationMap(sessions);
+
   return res.json({
-    items: users.map((user, index) => serializeLeaderboardUser(user, index + 1))
+    items: users.map((user, index) => ({
+      ...serializeLeaderboardUser(user, index + 1),
+      reputationScore: Math.max(
+        Number(user.reputationScore || 0),
+        Number(reputationByWallet.get(String(user.walletAddress || '').toLowerCase()) || 0)
+      )
+    }))
   });
 });
 

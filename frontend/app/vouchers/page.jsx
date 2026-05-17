@@ -59,6 +59,15 @@ function TradeCard({ trade, type }) {
         </div>
       )}
 
+      {voucher.text && (
+        <div className="mb-6 rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Original Message</p>
+          <p className="mt-3 break-words text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+            {voucher.text}
+          </p>
+        </div>
+      )}
+
       <div className="mt-auto space-y-3 border-t border-slate-800 pt-5 text-sm">
         <div className="flex justify-between gap-4">
           <span className="text-slate-500">Listing ID</span>

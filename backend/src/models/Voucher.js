@@ -4,6 +4,7 @@ const voucherSchema = new mongoose.Schema(
   {
     provider: { type: String, required: true },
     value: { type: Number, required: true },
+    text: { type: String, default: '' },
     codeHash: { type: String, required: true, unique: true, index: true },
     extractedCode: { type: String, default: '' },
     expiry: { type: Date, required: true },

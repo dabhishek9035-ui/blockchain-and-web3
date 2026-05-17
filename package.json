@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "dev:backend": "npm --prefix backend run dev",
+    "lint:backend": "npm --prefix backend run lint"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}

@@ -54,17 +54,12 @@ Set environment variables from `frontend/.env.example` first.
 Example request:
 ```json
 {
-  "text": "Congrats! You won ₹50 cashback voucher code ABC123 expiring tomorrow."
+  "text": "Hey, I thought you may like this ACwO voucher on Google Pay!
+Soundbars @ ₹899
+Enjoy Powerful Sound & Long Music Playtime
+Expiring in 14 days
+https://acwo.com/pages/gpaysb500?utm_source=googlepay&utm_medium=googlepaysalrdinm26&utm_campaign=googlepaysalrdinm26campaign
+
+Voucher code: GPSINMB12RSQSCVDY"
 }
 ```
-
-## Next steps
-1. Add real MongoDB persistence wiring and deploy-time environment setup.
-2. Connect ethers.js transaction flows to Sepolia contracts.
-3. Add marketplace listing, purchase, and dispute transaction flows.
-4. Add game reward submission from frontend to backend.
-5. Expand event listener retries, backfill, and reorg handling.
-
-## Deployment docs
-- [Remix deployment guide](docs/remix-deployment-guide.md)
-- [Sepolia demo checklist](docs/sepolia-demo-checklist.md)

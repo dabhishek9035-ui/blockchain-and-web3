@@ -4,6 +4,7 @@ import { parseVoucherText } from '../services/parser.js';
 import { createAuthChallenge, buildLoginMessage, verifyLoginSignature } from '../services/auth.js';
 import { buildVoucherHash, normalizeExpiry } from '../services/voucher.js';
 import { createRewardSigner } from '../services/reward.js';
+import { transferVoucherPurchaseBalance } from '../services/accounting.js';
 import { User } from '../models/User.js';
 import { Voucher } from '../models/Voucher.js';
 import { Listing } from '../models/Listing.js';
@@ -43,6 +44,18 @@ function serializeVoucher(voucher, listing = null, options = {}) {
 
 function findActiveListingForVoucher(voucherId) {
   return Listing.findOne({ voucherId, state: 'created' }).sort({ createdAt: -1 });
+}
+
+function serializeLeaderboardUser(user, rank) {
+  return {
+    rank,
+    walletAddress: user.walletAddress,
+    username: user.username || '',
+    reputationScore: user.reputationScore || 0,
+    xirecBalance: user.xirecBalanceMirror || 0,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
 }
 
 async function serializeTrade(listing, role) {
@@ -233,6 +246,16 @@ router.get('/vouchers/portfolio', async (req, res) => {
   return res.json({ bought, sold });
 });
 
+router.get('/leaderboard', async (_req, res) => {
+  const users = await User.find({})
+    .sort({ xirecBalanceMirror: -1, reputationScore: -1, updatedAt: -1 })
+    .limit(25);
+
+  return res.json({
+    items: users.map((user, index) => serializeLeaderboardUser(user, index + 1))
+  });
+});
+
 router.get('/vouchers/:id', async (req, res) => {
   const voucher = await Voucher.findById(req.params.id);
   if (!voucher) {
@@ -265,6 +288,12 @@ router.post('/listings/:listingId/purchase', async (req, res) => {
   listing.buyerWallet = walletAddress.toLowerCase();
   listing.state = 'purchased';
   await listing.save();
+
+  await transferVoucherPurchaseBalance({
+    buyerWallet: walletAddress,
+    sellerWallet: listing.sellerWallet,
+    amount: listing.priceXirec
+  });
 
   if (listing.voucherId) {
     await Voucher.updateOne(

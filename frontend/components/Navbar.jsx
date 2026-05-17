@@ -1,11 +1,13 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { disconnectWallet } from '../lib/wallet.js';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [walletAddress, setWalletAddress] = useState('');
 
   useEffect(() => {
@@ -21,6 +23,12 @@ export default function Navbar() {
     { name: 'Games', href: '/games' },
     { name: 'Leaderboard', href: '/leaderboard' },
   ];
+
+  async function handleLogout() {
+    await disconnectWallet();
+    setWalletAddress('');
+    router.push('/login');
+  }
 
   return (
     <nav className="glass-nav px-6 py-4">
@@ -46,10 +54,19 @@ export default function Navbar() {
 
         <div className="flex items-center gap-4">
           {walletAddress ? (
-            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/50 px-4 py-1.5 text-xs font-medium text-slate-300">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-            </div>
+            <>
+              <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/50 px-4 py-1.5 text-xs font-medium text-slate-300">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full border border-slate-700 bg-slate-950/70 px-4 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
+              >
+                Switch Wallet
+              </button>
+            </>
           ) : (
             <Link href="/login" className="btn-primary py-1.5 px-5 text-xs">
               Connect Wallet

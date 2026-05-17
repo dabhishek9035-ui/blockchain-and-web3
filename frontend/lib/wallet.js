@@ -55,3 +55,20 @@ export async function ensureSepoliaNetwork() {
     }
   }
 }
+
+export async function disconnectWallet() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('xirecWalletAddress');
+
+    if (window.ethereum?.request) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }]
+        });
+      } catch {
+        // Some wallets do not support permission revocation.
+      }
+    }
+  }
+}

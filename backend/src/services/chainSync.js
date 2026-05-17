@@ -3,6 +3,7 @@ import { Listing } from '../models/Listing.js';
 import { Voucher } from '../models/Voucher.js';
 import { Dispute } from '../models/Dispute.js';
 import { AuditLog } from '../models/AuditLog.js';
+import { transferVoucherPurchaseBalance } from './accounting.js';
 
 async function updateListingFromEvent(listingId, patch, options = {}) {
   const listing = await Listing.findOneAndUpdate(
@@ -66,6 +67,12 @@ export async function handleListingPurchased(event) {
   });
 
   if (listing) {
+    await transferVoucherPurchaseBalance({
+      buyerWallet: buyer,
+      sellerWallet: listing.sellerWallet,
+      amount: listing.priceXirec
+    });
+
     if (listing.voucherId) {
       await Voucher.updateOne(
         { _id: listing.voucherId },

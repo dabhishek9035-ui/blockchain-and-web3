@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voucher Marketplace – Create Listing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+            padding-left: 12px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 250px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: vertical;
+            margin-bottom: 16px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.2s;
+            margin-right: 12px;
+        }
+
+        button:hover {
+            background: #5a67d8;
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        pre {
+            background: #f7f7f7;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            font-family: monospace;
+            margin-top: 16px;
+            border: 1px solid #eee;
+        }
+
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #38a169;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #e53e3e;
+        }
+
+        .status.info {
+            background: #e6f0ff;
+            color: #2b6cb0;
+            border-left: 4px solid #3182ce;
+        }
+
+        .flex {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Left Panel: Input & Parse -->
+    <div class="card">
+        <h2>📝 Voucher Text</h2>
+        <textarea id="voucherText" placeholder="Paste the entire voucher message here...&#10;&#10;Example:&#10;Hey, I thought you may like this TecSox voucher on Google Pay!&#10;Only at ₹349!&#10;Deep Bass Wireless Earbuds | Free Shipping&#10;Expiring in 62 days&#10;https://example.com&#10;Voucher code: TSGP37WPDJPK"></textarea>
+        <div class="flex">
+            <button id="parseBtn">🔍 Parse Voucher</button>
+            <button id="clearBtn" class="secondary">🗑 Clear</button>
+        </div>
+        <div id="parseStatus"></div>
+        <pre id="parsedJson">{} </pre>
+    </div>
+
+    <!-- Right Panel: Create Listing -->
+    <div class="card">
+        <h2>🚀 Create Marketplace Listing</h2>
+        <p style="color:#666; margin-bottom:16px;">After parsing, review the JSON and click below to mint the voucher on-chain.</p>
+        <button id="createBtn" style="background:#805ad5;">✨ Create Listing on Blockchain</button>
+        <div id="createStatus"></div>
+        <pre id="createResult"></pre>
+        <hr>
+        <details>
+            <summary style="cursor:pointer; color:#667eea;">⚠️ Requirements</summary>
+            <ul style="margin-top:12px; margin-left:20px; color:#555;">
+                <li>Seller wallet must have approved the marketplace contract for the stake (1% of price).</li>
+                <li>Seller must have sufficient XIREC balance.</li>
+                <li>Expiry date must be in the future.</li>
+            </ul>
+        </details>
+    </div>
+</div>
+
+<script>
+    // Configuration – adjust if your services run on different ports/hosts
+    const PARSER_API = 'http://localhost:3001/parse-voucher';
+    const MARKETPLACE_API = 'http://localhost:3000/api/listings/create';
+
+    let currentParsedData = null;
+
+    // DOM elements
+    const voucherText = document.getElementById('voucherText');
+    const parseBtn = document.getElementById('parseBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const parseStatus = document.getElementById('parseStatus');
+    const parsedJson = document.getElementById('parsedJson');
+    const createBtn = document.getElementById('createBtn');
+    const createStatus = document.getElementById('createStatus');
+    const createResult = document.getElementById('createResult');
+
+    // Helper to show status messages
+    function showStatus(element, message, type) {
+        element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        setTimeout(() => {
+            if (element.innerHTML.includes(message)) {
+                element.innerHTML = '';
+            }
+        }, 5000);
+    }
+
+    // Parse voucher
+    async function parseVoucher() {
+        const text = voucherText.value.trim();
+        if (!text) {
+            showStatus(parseStatus, 'Please paste some voucher text.', 'error');
+            return;
+        }
+
+        parseStatus.innerHTML = '<div class="status info">🔄 Sending to parser...</div>';
+        try {
+            const response = await fetch(PARSER_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Parser error');
+            }
+
+            const data = await response.json();
+            currentParsedData = data;
+            parsedJson.textContent = JSON.stringify(data, null, 2);
+            showStatus(parseStatus, '✅ Parsed successfully! You can now create the listing.', 'success');
+        } catch (err) {
+            console.error(err);
+            parsedJson.textContent = '{}';
+            showStatus(parseStatus, `❌ Parse failed: ${err.message}`, 'error');
+            currentParsedData = null;
+        }
+    }
+
+    // Create listing on marketplace backend
+    async function createListing() {
+        if (!currentParsedData) {
+            showStatus(createStatus, 'No parsed data. Please parse a voucher first.', 'error');
+            return;
+        }
+
+        // Basic validation
+        if (!currentParsedData.rawCouponCode || !currentParsedData.price || !currentParsedData.sellerWallet) {
+            showStatus(createStatus, 'Missing required fields in parsed data (code, price, or seller wallet).', 'error');
+            return;
+        }
+
+        createStatus.innerHTML = '<div class="status info">⏳ Sending listing to blockchain...</div>';
+        try {
+            const response = await fetch(MARKETPLACE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentParsedData)
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'Marketplace error');
+            }
+
+            createResult.textContent = JSON.stringify(result, null, 2);
+            showStatus(createStatus, `🎉 Listing created! Listing ID: ${result.listingId}`, 'success');
+        } catch (err) {
+            console.error(err);
+            createResult.textContent = err.message;
+            showStatus(createStatus, `❌ Failed to create listing: ${err.message}`, 'error');
+        }
+    }
+
+    // Clear all fields
+    function clearAll() {
+        voucherText.value = '';
+        parsedJson.textContent = '{}';
+        createResult.textContent = '';
+        currentParsedData = null;
+        parseStatus.innerHTML = '';
+        createStatus.innerHTML = '';
+    }
+
+    // Event listeners
+    parseBtn.addEventListener('click', parseVoucher);
+    createBtn.addEventListener('click', createListing);
+    clearBtn.addEventListener('click', clearAll);
+</script>
+</body>
+</html>

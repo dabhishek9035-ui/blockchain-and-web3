@@ -13,14 +13,41 @@ export default function DashboardPage() {
   const [chainStatus, setChainStatus] = useState(null);
   const [tokenBalance, setTokenBalance] = useState('');
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [reputationScore, setReputationScore] = useState(null);
+  const [loadingReputation, setLoadingReputation] = useState(false);
 
   useEffect(() => {
-    setWalletAddress(localStorage.getItem('xirecWalletAddress') || 'Not connected yet');
+    const address = localStorage.getItem('xirecWalletAddress') || 'Not connected yet';
+    setWalletAddress(address);
+    
     fetch(`${backendUrl}/api/chain/status`)
       .then((response) => response.json())
       .then((data) => setChainStatus(data))
       .catch(() => setChainStatus(null));
+
+    // Fetch user reputation
+    if (address && address !== 'Not connected yet') {
+      loadUserReputation(address);
+    }
   }, []);
+
+  async function loadUserReputation(address) {
+    try {
+      setLoadingReputation(true);
+      const response = await fetch(`${backendUrl}/api/user/${address.toLowerCase()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setReputationScore(data.reputationScore || 0);
+      } else {
+        setReputationScore(null);
+      }
+    } catch (error) {
+      console.error('Failed to load reputation:', error);
+      setReputationScore(null);
+    } finally {
+      setLoadingReputation(false);
+    }
+  }
 
   async function readBalance() {
     try {
@@ -79,7 +106,19 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Reputation Score</p>
-              <p className="mt-2 text-3xl font-bold text-emerald-400">98 / 100</p>
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-3xl font-bold text-emerald-400">
+                  {reputationScore !== null ? `${reputationScore} / 100` : 'Loading...'}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  className="px-3 py-1.5 text-xs" 
+                  onClick={() => walletAddress && walletAddress !== 'Not connected yet' && loadUserReputation(walletAddress)}
+                  loading={loadingReputation}
+                >
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
         </Card>
@@ -133,4 +172,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-}
+}

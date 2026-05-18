@@ -6,7 +6,9 @@ export function createProvider(rpcUrl) {
     throw new Error('RPC_URL is required');
   }
 
-  return new JsonRpcProvider(rpcUrl);
+  // Increase timeout to 30 seconds for slow RPC endpoints
+  const provider = new JsonRpcProvider(rpcUrl, null, { timeout: 30000 });
+  return provider;
 }
 
 export function createContracts({ provider, marketplaceAddress, tokenAddress, reputationAddress, rewardDistributorAddress }) {

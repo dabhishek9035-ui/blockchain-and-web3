@@ -92,6 +92,18 @@ export default function MarketplacePage() {
       const buyTx = await escrowContract.buyListing(item.listingId);
       await buyTx.wait();
 
+      setStatus(`Confirming receipt for listing #${item.listingId}...`);
+      try {
+        const confirmTx = await escrowContract.confirmReceived(item.listingId);
+        await confirmTx.wait();
+        setStatus(`Receipt confirmed on-chain for listing #${item.listingId}.`);
+      } catch (confirmErr) {
+        // If auto-confirm fails (buyer rejected, gas error, or buyer not allowed), fall back to asking buyer
+        console.error('[marketplace] auto-confirm failed', confirmErr);
+        setStatus('Purchase complete — awaiting on-chain confirmation.');
+      }
+
+      // Inform backend (best-effort) about the purchase; listener will sync if this fails
       const buyerAddress = await escrowContract.runner?.getAddress?.();
       if (buyerAddress) {
         try {

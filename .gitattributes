@@ -41,3 +41,18 @@
 package.json text eol=lf
 package-lock.json text eol=lf
 yarn.lock text eol=lf
+
+# Ignore generated build artifacts for export
+/frontend/.next/** export-ignore
+/backend/node_modules/** linguist-vendored
+/contracts/artifacts/** linguist-generated
+/contracts/cache/** linguist-generated
+
+# Do not include large or generated folders in archives
+/docs/** export-ignore
+/tests/** export-ignore
+/.github/** export-ignore
+
+# Ensure README and LICENSE are exported (leave them tracked)
+README.md text eol=lf
+LICENSE text eol=lf

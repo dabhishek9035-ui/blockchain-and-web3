@@ -56,7 +56,11 @@ export function startMarketplaceListener({
       });
     };
 
-    marketplace.on(eventName, listener);
+    try {
+      marketplace.on(eventName, listener);
+    } catch (error) {
+      console.error(`[listener] Failed to register ${eventName} listener:`, error.message);
+    }
     listeners.push([eventName, listener]);
   };
 

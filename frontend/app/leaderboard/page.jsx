@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserProvider, Contract, formatUnits } from 'ethers';
 import { backendUrl } from '../../lib/api.js';
-import { getContractAddresses, XIREC_TOKEN_ABI } from '../../lib/contracts.js';
+import { getContractAddresses, REPUTATION_MANAGER_ABI, XIREC_TOKEN_ABI } from '../../lib/contracts.js';
 
 function shortAddress(address) {
   if (!address) return 'Unknown wallet';
@@ -33,23 +33,40 @@ export default function LeaderboardPage() {
         const data = await response.json();
 
         const leaderboardItems = data.items || [];
-        const { token } = getContractAddresses();
+        const { token, reputation } = getContractAddresses();
 
-        if (token && typeof window !== 'undefined' && window.ethereum) {
+        if (typeof window !== 'undefined' && window.ethereum && (token || reputation)) {
           const provider = new BrowserProvider(window.ethereum);
-          const contract = new Contract(token, XIREC_TOKEN_ABI, provider);
+          const tokenContract = token ? new Contract(token, XIREC_TOKEN_ABI, provider) : null;
+          const reputationContract = reputation ? new Contract(reputation, REPUTATION_MANAGER_ABI, provider) : null;
 
           const resolvedItems = await Promise.all(
             leaderboardItems.map(async (item) => {
-              try {
-                const balance = await contract.balanceOf(item.walletAddress);
-                return {
-                  ...item,
-                  xirecBalance: Number(formatUnits(balance, 18))
-                };
-              } catch {
-                return item;
+              const nextItem = { ...item };
+
+              if (tokenContract) {
+                try {
+                  const balance = await tokenContract.balanceOf(item.walletAddress);
+                  nextItem.xirecBalance = Number(formatUnits(balance, 18));
+                } catch {
+                  // Keep the backend mirror if the chain call fails.
+                }
               }
+
+              if (reputationContract) {
+                try {
+                  const reputationScore = await reputationContract.getReputation(item.walletAddress);
+                  nextItem.reputationScore = Number(reputationScore.toString());
+                } catch {
+                  if (nextItem.reputationScore == null) {
+                    nextItem.reputationScore = 50;
+                  }
+                }
+              } else if (nextItem.reputationScore == null) {
+                nextItem.reputationScore = 50;
+              }
+
+              return nextItem;
             })
           );
 
@@ -65,7 +82,12 @@ export default function LeaderboardPage() {
 
           setItems(resolvedItems);
         } else {
-          setItems(leaderboardItems);
+          setItems(
+            leaderboardItems.map((item) => ({
+              ...item,
+              reputationScore: item.reputationScore ?? 50
+            }))
+          );
         }
       } catch (err) {
         setError(err.message || 'Failed to load leaderboard');

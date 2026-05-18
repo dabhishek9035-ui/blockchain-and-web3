@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { parseUnits } from 'ethers';
+import { parseUnits, toBeHex } from 'ethers';
 import { parseVoucherText } from '../services/parser.js';
 import { createAuthChallenge, buildLoginMessage, verifyLoginSignature } from '../services/auth.js';
 import { buildVoucherHash, normalizeExpiry } from '../services/voucher.js';
 import { createRewardSigner } from '../services/reward.js';
-import { transferVoucherPurchaseBalance } from '../services/accounting.js';
+import { transferVoucherPurchaseBalance, getPendingSellerPayouts } from '../services/accounting.js';
 import { User } from '../models/User.js';
 import { Voucher } from '../models/Voucher.js';
 import { Listing } from '../models/Listing.js';
@@ -268,34 +268,30 @@ router.get('/leaderboard', async (_req, res) => {
     .sort({ xirecBalanceMirror: -1, reputationScore: -1, updatedAt: -1 })
     .limit(25);
 
-  const walletAddresses = users.map((user) => String(user.walletAddress || '').toLowerCase()).filter(Boolean);
-  const sessions = walletAddresses.length
-    ? await GameSession.aggregate([
-        {
-          $match: {
-            walletAddress: { $in: walletAddresses },
-            rewardAuthorized: true
-          }
-        },
-        {
-          $group: {
-            _id: '$walletAddress',
-            reputationScore: { $sum: '$rewardAmount' }
-          }
-        }
-      ])
-    : [];
+  return res.json({
+    items: users.map((user, index) => serializeLeaderboardUser(user, index + 1))
+  });
+});
 
-  const reputationByWallet = buildReputationMap(sessions);
+router.get('/user/:walletAddress', async (req, res) => {
+  const walletAddress = String(req.params.walletAddress || '').trim().toLowerCase();
+
+  if (!walletAddress) {
+    return res.status(400).json({ error: 'walletAddress is required' });
+  }
+
+  const user = await User.findOne({ walletAddress });
+  if (!user) {
+    return res.status(404).json({ error: 'user not found' });
+  }
 
   return res.json({
-    items: users.map((user, index) => ({
-      ...serializeLeaderboardUser(user, index + 1),
-      reputationScore: Math.max(
-        Number(user.reputationScore || 0),
-        Number(reputationByWallet.get(String(user.walletAddress || '').toLowerCase()) || 0)
-      )
-    }))
+    walletAddress: user.walletAddress,
+    username: user.username || '',
+    reputationScore: Number(user.reputationScore || 0),
+    xirecBalanceMirror: Number(user.xirecBalanceMirror || 0),
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
   });
 });
 
@@ -328,15 +324,20 @@ router.post('/listings/:listingId/purchase', async (req, res) => {
     return res.status(404).json({ error: 'listing not found' });
   }
 
+  // Only transfer balance if not already purchased (prevent double transfer)
+  const shouldTransferBalance = listing.state !== 'purchased' && listing.state !== 'confirmed';
+
   listing.buyerWallet = walletAddress.toLowerCase();
   listing.state = 'purchased';
   await listing.save();
 
-  await transferVoucherPurchaseBalance({
-    buyerWallet: walletAddress,
-    sellerWallet: listing.sellerWallet,
-    amount: listing.priceXirec
-  });
+  if (shouldTransferBalance) {
+    await transferVoucherPurchaseBalance({
+      buyerWallet: walletAddress,
+      sellerWallet: listing.sellerWallet,
+      amount: listing.priceXirec
+    });
+  }
 
   if (listing.voucherId) {
     await Voucher.updateOne(
@@ -459,6 +460,84 @@ router.post('/games/reward-signature', async (req, res) => {
   });
 
   return res.json({ signature, nonce: Number(nonce), signer: signer.address, amount: rewardAmount });
+});
+
+router.get('/seller/:walletAddress/pending-payouts', async (req, res) => {
+  const walletAddress = String(req.params.walletAddress || '').trim().toLowerCase();
+
+  if (!walletAddress) {
+    return res.status(400).json({ error: 'walletAddress is required' });
+  }
+
+  const payouts = await getPendingSellerPayouts(walletAddress);
+
+  return res.json({
+    walletAddress,
+    pendingListings: payouts.pendingListings.map((listing) => ({
+      listingId: listing.listingIdOnChain,
+      buyerWallet: listing.buyerWallet,
+      amount: listing.priceXirec,
+      purchasedAt: listing.updatedAt
+    })),
+    totalPayable: payouts.totalPayable,
+    count: payouts.count
+  });
+});
+
+router.get('/listings/:listingId/confirmation-tx', async (req, res) => {
+  const listingIdOnChain = Number(req.params.listingId);
+  const sellerWallet = String(req.query.sellerWallet || '').trim().toLowerCase();
+
+  if (!sellerWallet) {
+    return res.status(400).json({ error: 'sellerWallet is required' });
+  }
+
+  if (!Number.isSafeInteger(listingIdOnChain) || listingIdOnChain <= 0) {
+    return res.status(400).json({ error: 'listingId must be a positive number' });
+  }
+
+  const listing = await Listing.findOne({ listingIdOnChain });
+  if (!listing) {
+    return res.status(404).json({ error: 'listing not found' });
+  }
+
+  if (listing.sellerWallet !== sellerWallet) {
+    return res.status(403).json({ error: 'only seller can request confirmation from buyer' });
+  }
+
+  if (listing.state !== 'purchased') {
+    return res.status(400).json({ error: 'listing is not in purchased state' });
+  }
+
+  if (!listing.buyerWallet) {
+    return res.status(400).json({ error: 'listing has no buyer yet' });
+  }
+
+  // Generate transaction data for confirmReceived()
+  const marketplaceAddress = process.env.NEXT_PUBLIC_VOUCHER_ESCROW_ADDRESS || process.env.VOUCHER_ESCROW_ADDRESS;
+  if (!marketplaceAddress) {
+    return res.status(500).json({ error: 'marketplace address not configured' });
+  }
+
+  // confirmReceived(uint256 listingId) function selector
+  const functionSelector = '0xc8456fb9'; // keccak256('confirmReceived(uint256)').slice(0,8)
+  const encodedListingId = toBeHex(listingIdOnChain, 32).slice(2);
+  const data = functionSelector + encodedListingId;
+
+  return res.json({
+    listingId: listingIdOnChain,
+    sellerWallet,
+    buyerWallet: listing.buyerWallet,
+    amount: listing.priceXirec,
+    escrowAmount: listing.escrowAmount,
+    totalPayout: listing.priceXirec + (listing.escrowAmount || 0),
+    tx: {
+      to: marketplaceAddress.toLowerCase(),
+      data,
+      value: '0'
+    },
+    note: 'Ask the buyer to confirm receipt by approving this transaction. Once confirmed, payment will be transferred to your wallet.'
+  });
 });
 
 export default router;

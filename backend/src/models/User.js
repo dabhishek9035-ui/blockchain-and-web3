@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema(
   {
     walletAddress: { type: String, required: true, unique: true, index: true },
     username: { type: String, default: '' },
-    reputationScore: { type: Number, default: 0 },
+    reputationScore: { type: Number, default: 50 },
     xirecBalanceMirror: { type: Number, default: 0 },
     authNonce: { type: String, default: '' },
     lastLoginAt: { type: Date, default: null }

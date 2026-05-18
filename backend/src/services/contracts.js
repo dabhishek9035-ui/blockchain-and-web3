@@ -6,7 +6,9 @@ export const MARKETPLACE_ABI = [
   'event DisputeResolved(uint256 indexed listingId, bool buyerWins, uint256 penaltyAmount)',
   'event ListingCancelled(uint256 indexed listingId)',
   'event ListingExpired(uint256 indexed listingId)',
-  'function listings(uint256 listingId) view returns (address seller, address buyer, bytes32 voucherHash, uint256 price, uint256 escrowAmount, uint256 expiryTimestamp, uint8 state, uint256 createdAt)'
+  'function listings(uint256 listingId) view returns (address seller, address buyer, bytes32 voucherHash, uint256 price, uint256 escrowAmount, uint256 expiryTimestamp, uint8 state, uint256 createdAt)',
+  'function purchaseEscrows(uint256 listingId) view returns (address seller, address buyer, bytes32 voucherHash, uint256 price, uint256 escrowAmount, uint8 state, uint256 createdAt)',
+  'function confirmReceived(uint256 listingId)'
 ];
 
 export const XIREC_TOKEN_ABI = [

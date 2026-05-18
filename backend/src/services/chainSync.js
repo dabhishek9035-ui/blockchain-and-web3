@@ -3,7 +3,7 @@ import { Listing } from '../models/Listing.js';
 import { Voucher } from '../models/Voucher.js';
 import { Dispute } from '../models/Dispute.js';
 import { AuditLog } from '../models/AuditLog.js';
-import { transferVoucherPurchaseBalance } from './accounting.js';
+import { transferVoucherPurchaseBalance, increaseUserReputation, returnEscrowToSeller } from './accounting.js';
 
 async function updateListingFromEvent(listingId, patch, options = {}) {
   const listing = await Listing.findOneAndUpdate(
@@ -61,6 +61,11 @@ export async function handleListingPurchased(event) {
     return null;
   }
 
+  // Only process if not already purchased (prevent double transfer)
+  if (existing.state === 'purchased' || existing.state === 'confirmed') {
+    return existing;
+  }
+
   const listing = await updateListingFromEvent(listingId, {
     buyerWallet: String(buyer).toLowerCase(),
     state: 'purchased'
@@ -100,6 +105,27 @@ export async function handleListingConfirmed(event) {
 
   const listing = await updateListingFromEvent(listingId, { state: 'confirmed' });
   if (listing) {
+    // Return escrow to seller
+    try {
+      if (listing.sellerWallet && listing.escrowAmount) {
+        await returnEscrowToSeller(listing.sellerWallet, listing.escrowAmount);
+      }
+    } catch (error) {
+      console.error(`[chainSync] Failed to return escrow for listing ${listingId}`, error);
+    }
+
+    // Increase reputation for both buyer and seller on successful trade
+    try {
+      if (listing.buyerWallet) {
+        await increaseUserReputation(listing.buyerWallet);
+      }
+      if (listing.sellerWallet) {
+        await increaseUserReputation(listing.sellerWallet);
+      }
+    } catch (error) {
+      console.error(`[chainSync] Failed to increase reputation for listing ${listingId}`, error);
+    }
+
     await AuditLog.create({
       action: 'listing_confirmed_onchain',
       actor: listing.sellerWallet,

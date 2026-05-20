@@ -35,7 +35,7 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/20" />
-          <span className="text-xl font-bold tracking-tight text-white">XIREC</span>
+          <span className="text-xl font-bold tracking-tight text-white">XIREC Project</span>
         </Link>
 
         <div className="hidden items-center gap-8 md:flex">

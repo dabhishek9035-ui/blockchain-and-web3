@@ -3,8 +3,8 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 export const metadata = {
-  title: 'Xirec | Voucher Marketplace',
-  description: 'Hybrid Web2 + Web3 voucher marketplace with escrow and reputation.'
+  title: 'XIREC Project | Voucher Escrow Demo',
+  description: 'Open-source Next.js frontend for a voucher escrow workflow with wallet, marketplace, and reward screens.'
 };
 
 export default function RootLayout({ children }) {

@@ -17,12 +17,16 @@ function formatDate(value) {
   return date.toLocaleDateString();
 }
 
-function TradeCard({ trade, type }) {
+function TradeCard({ trade, type, onRaiseDispute, disputeLoading }) {
   const voucher = trade.voucher || {};
   const isBought = type === 'bought';
+  const canDispute = isBought && trade.state === 'purchased';
+  const alreadyDisputed = trade.state === 'disputed';
   const statusClass = trade.state === 'purchased' || trade.state === 'confirmed'
     ? 'text-emerald-400 bg-emerald-500/10'
-    : 'text-cyan-400 bg-cyan-500/10';
+    : trade.state === 'disputed'
+      ? 'text-rose-300 bg-rose-500/10'
+      : 'text-cyan-400 bg-cyan-500/10';
 
   return (
     <Card className="flex min-h-[360px] flex-col" hoverEffect={false}>
@@ -68,6 +72,34 @@ function TradeCard({ trade, type }) {
         </div>
       )}
 
+      {isBought && (
+        <div className={`mb-6 rounded-2xl border p-4 ${alreadyDisputed ? 'border-rose-500/20 bg-rose-500/10' : 'border-amber-500/20 bg-amber-500/10'}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-amber-300">Dispute</p>
+              <p className="mt-1 text-sm text-slate-200">
+                {canDispute
+                  ? 'Raise a dispute for this purchased voucher. The fee is 30 Xirec and the seller loses 30 reputation.'
+                  : alreadyDisputed
+                    ? 'A dispute has already been raised for this voucher.'
+                    : 'Disputes can only be raised while the voucher is in purchased state.'}
+              </p>
+            </div>
+            {canDispute && (
+              <Button
+                type="button"
+                variant="danger"
+                loading={disputeLoading}
+                onClick={() => onRaiseDispute(trade)}
+                className="shrink-0"
+              >
+                Raise Dispute
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mt-auto space-y-3 border-t border-slate-800 pt-5 text-sm">
         <div className="flex justify-between gap-4">
           <span className="text-slate-500">Listing ID</span>
@@ -108,46 +140,93 @@ function EmptyState({ type }) {
 
 export default function MyVouchersPage() {
   const [walletAddress, setWalletAddress] = useState('');
-  const [portfolio, setPortfolio] = useState({ bought: [], sold: [] });
+  const [vouchers, setVouchers] = useState({ bought: [], sold: [] });
   const [activeTab, setActiveTab] = useState('bought');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [disputeLoadingId, setDisputeLoadingId] = useState('');
+  const [notice, setNotice] = useState('');
 
   const activeTrades = useMemo(
-    () => portfolio[activeTab] || [],
-    [activeTab, portfolio]
+    () => vouchers[activeTab] || [],
+    [activeTab, vouchers]
   );
 
-  useEffect(() => {
-    async function loadPortfolio() {
-      const address = localStorage.getItem('xirecWalletAddress') || '';
-      setWalletAddress(address);
+  async function loadVouchers() {
+    const address = localStorage.getItem('xirecWalletAddress') || '';
+    setWalletAddress(address);
 
-      if (!address) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setError('');
-        const response = await fetch(`${backendUrl}/api/vouchers/portfolio?walletAddress=${encodeURIComponent(address)}`);
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to load vouchers');
-        }
-        setPortfolio({
-          bought: data.bought || [],
-          sold: data.sold || []
-        });
-      } catch (err) {
-        setError(err.message || 'Failed to load vouchers');
-      } finally {
-        setLoading(false);
-      }
+    if (!address) {
+      setLoading(false);
+      return;
     }
 
-    loadPortfolio();
+    try {
+      setError('');
+      const response = await fetch(`${backendUrl}/api/vouchers/portfolio?walletAddress=${encodeURIComponent(address)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load vouchers');
+      }
+      setVouchers({
+        bought: data.bought || [],
+        sold: data.sold || []
+      });
+    } catch (err) {
+      setError(err.message || 'Failed to load vouchers');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadVouchers();
   }, []);
+
+  async function handleRaiseDispute(trade) {
+    if (!walletAddress || !trade?.listingId) {
+      return;
+    }
+
+    const reason = window.prompt('Enter a dispute reason for this voucher:')?.trim() || '';
+    if (!reason) {
+      return;
+    }
+
+    const confirmed = window.confirm('This will cost 30 Xirec and reduce the seller reputation by 30. Continue?');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDisputeLoadingId(trade.listingId);
+      setError('');
+      setNotice('');
+
+      const response = await fetch(`${backendUrl}/api/listings/${trade.listingId}/dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8'
+        },
+        body: JSON.stringify({
+          walletAddress,
+          reason
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to raise dispute');
+      }
+
+      setNotice('Dispute raised successfully.');
+      await loadVouchers();
+    } catch (err) {
+      setError(err.message || 'Failed to raise dispute');
+    } finally {
+      setDisputeLoadingId('');
+    }
+  }
 
   if (!walletAddress && !loading) {
     return (
@@ -178,8 +257,8 @@ export default function MyVouchersPage() {
 
         <div className="flex rounded-full border border-slate-800 bg-slate-950/70 p-1">
           {[
-            ['bought', `Bought (${portfolio.bought.length})`],
-            ['sold', `Sold (${portfolio.sold.length})`]
+            ['bought', `Bought (${vouchers.bought.length})`],
+            ['sold', `Sold (${vouchers.sold.length})`]
           ].map(([key, label]) => (
             <button
               key={key}
@@ -203,6 +282,12 @@ export default function MyVouchersPage() {
         </div>
       )}
 
+      {notice && (
+        <div className="mb-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-300">
+          <p className="text-sm font-medium">{notice}</p>
+        </div>
+      )}
+
       {loading ? (
         <Card className="py-16 text-center" hoverEffect={false}>
           <p className="text-slate-400">Loading your vouchers...</p>
@@ -216,6 +301,8 @@ export default function MyVouchersPage() {
               key={`${activeTab}-${trade.listingId || trade.updatedAt}`}
               trade={trade}
               type={activeTab}
+              onRaiseDispute={handleRaiseDispute}
+              disputeLoading={disputeLoadingId === trade.listingId}
             />
           ))}
         </div>
